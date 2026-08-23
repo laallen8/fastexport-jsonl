@@ -41,6 +41,17 @@ jq 'select(.type == "commit") | .message' history.jsonl
 jq 'select(.type == "commit" and (.merges // []) != [])' history.jsonl | wc -l
 ```
 
+To go back the other way, feed edited (or untouched) JSON Lines to
+`from-jsonl` and pipe the result into `git fast-import`:
+
+```sh
+python -m fastexport_jsonl from-jsonl < history.jsonl | git fast-import
+```
+
+`FastExportWriter` is the mirror of `FastExportReader`: it takes the
+same dicts and writes the fast-import command language back out, one
+record at a time.
+
 ## Why streaming matters
 
 `git fast-export --all` on a repository with any real history can
@@ -59,18 +70,20 @@ for record in FastExportReader(sys.stdin.buffer).records():
 
 ## Current scope
 
-Only the fast-export -> JSON Lines direction exists so far. The
-parser covers `blob`, `commit`, `reset`, and `tag` commands, including
-file changes (`M`/`D`/`C`/`R`/`N`/`deleteall`) with C-quoted paths.
-Anything else (`feature`, `progress`, `checkpoint`, ...) is preserved
-verbatim as an `"other"` record instead of being dropped.
+Both directions exist now. The parser and writer both cover `blob`,
+`commit`, `reset`, and `tag` commands, including file changes
+(`M`/`D`/`C`/`R`/`N`/`deleteall`) with C-quoted paths. Anything else
+(`feature`, `progress`, `checkpoint`, ...) round-trips verbatim as an
+`"other"` record instead of being dropped.
 
 Not done yet:
 
-- converting JSON Lines back into a fast-export stream for `git
-  fast-import`
-- delimited (`data <<EOF`) data blocks are parsed but not yet
-  produced by anything, since nothing writes fast-export output yet
+- `FastExportWriter` only emits the exact-length `data <n>` form;
+  delimited (`data <<EOF`) blocks are parsed on the way in but never
+  produced on the way out, so very large payloads are still fully
+  materialized as one `bytes` object before being written
+- no round-trip tests against real repository histories yet
+- no CLI flag to filter records by type
 
 ## License
 
