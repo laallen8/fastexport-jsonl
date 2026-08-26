@@ -76,13 +76,20 @@ Both directions exist now. The parser and writer both cover `blob`,
 (`feature`, `progress`, `checkpoint`, ...) round-trips verbatim as an
 `"other"` record instead of being dropped.
 
+`tests/test_roundtrip.py` covers both directions against a hand-built
+fast-export stream (exact-length and delimited `data` blocks, a binary
+blob, a merge commit exercising every file-change op, a tag) and
+checks that records survive a `json.dumps`/`json.loads` hop unchanged.
+It hasn't been run against an actual `git fast-export --all` dump yet.
+
 Not done yet:
 
 - `FastExportWriter` only emits the exact-length `data <n>` form;
   delimited (`data <<EOF`) blocks are parsed on the way in but never
   produced on the way out, so very large payloads are still fully
   materialized as one `bytes` object before being written
-- no round-trip tests against real repository histories yet
+- no round-trip test against an actual repository's `fast-export`
+  output, only the synthetic fixture above
 - no CLI flag to filter records by type
 
 ## License
