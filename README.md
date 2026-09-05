@@ -82,12 +82,16 @@ blob, a merge commit exercising every file-change op, a tag) and
 checks that records survive a `json.dumps`/`json.loads` hop unchanged.
 It hasn't been run against an actual `git fast-export --all` dump yet.
 
+`FastExportWriter` emits the exact-length `data <n>` form for most
+payloads, and switches to a delimited `data <<DELIM` block once a
+payload passes a size threshold and ends in a newline (the delimited
+reader has no way to distinguish "payload ended right before the
+delimiter line" from "the payload's last line happened to be blank",
+so a payload without a trailing newline stays in the exact-length form
+regardless of size).
+
 Not done yet:
 
-- `FastExportWriter` only emits the exact-length `data <n>` form;
-  delimited (`data <<EOF`) blocks are parsed on the way in but never
-  produced on the way out, so very large payloads are still fully
-  materialized as one `bytes` object before being written
 - no round-trip test against an actual repository's `fast-export`
   output, only the synthetic fixture above
 - no CLI flag to filter records by type

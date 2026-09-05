@@ -2,19 +2,26 @@
 
 This is the mirror of `FastExportReader`: given the same dicts the
 reader produces, it writes bytes that `git fast-import` (or the reader
-itself) can consume. It only emits the exact-length `data <n>` form,
-never the `data <<DELIM` form, so every payload is written with a
-single length prefix and no scanning for a delimiter is needed.
+itself) can consume.
 """
 
 from __future__ import annotations
 
 import base64
+import uuid
 from typing import BinaryIO, Dict, Iterable
 
 from .parser import ParseError
 
 _QUOTE_CHARS = (" ", '"', "\\")
+
+# Below this size, the exact-length `data <n>` form is simpler and just as
+# cheap. Above it, switch to a delimited `data <<DELIM` block so a reader
+# consuming the stream doesn't need the length known up front; only usable
+# when the payload already ends in a newline (see _write_data), since our
+# delimiter-based reader has no way to tell "payload ended right before the
+# delimiter line" apart from "payload's last line happened to be blank".
+_DELIMITED_THRESHOLD = 1_000_000
 
 
 class FastExportWriter:
@@ -52,11 +59,23 @@ class FastExportWriter:
 
     def _write_data(self, record: Dict, encoding_key: str, data_key: str) -> None:
         payload = _decode_payload(_require(record, encoding_key), _require(record, data_key))
+        if len(payload) >= _DELIMITED_THRESHOLD and payload.endswith(b"\n"):
+            self._write_delimited_data(payload)
+        else:
+            self._write_exact_data(payload)
+
+    def _write_exact_data(self, payload: bytes) -> None:
         # No trailing newline beyond the payload itself: the exact-length
         # `data <n>` form is byte-counted, and the reader advances straight
         # to the next line once it has consumed those `n` bytes.
         self._write_line(b"data " + str(len(payload)).encode("ascii"))
         self._stream.write(payload)
+
+    def _write_delimited_data(self, payload: bytes) -> None:
+        delim = _choose_delimiter(payload)
+        self._write_line(b"data <<" + delim)
+        self._stream.write(payload)
+        self._write_line(delim)
 
     # -- command writers ------------------------------------------------
 
@@ -103,6 +122,21 @@ def _require(record: Dict, key: str):
 
 def _encode(text: str) -> bytes:
     return text.encode("utf-8", errors="surrogateescape")
+
+
+def _choose_delimiter(payload: bytes) -> bytes:
+    """Pick a token that doesn't occur as a whole line inside `payload`.
+
+    The reader treats a delimited block as over the moment it sees a line
+    equal to the delimiter, so the delimiter must not collide with any line
+    of the payload itself. A random UUID makes an accidental collision
+    negligible, but check anyway and retry rather than trust it blindly.
+    """
+    lines = frozenset(payload.split(b"\n"))
+    while True:
+        candidate = b"END_" + uuid.uuid4().hex.encode("ascii")
+        if candidate not in lines:
+            return candidate
 
 
 def _decode_payload(encoding: str, data: str) -> bytes:

@@ -16,6 +16,7 @@ import json
 import unittest
 
 from fastexport_jsonl import FastExportReader, FastExportWriter
+from fastexport_jsonl.writer import _DELIMITED_THRESHOLD
 
 
 def _data(payload: bytes) -> bytes:
@@ -177,6 +178,46 @@ class RoundTripTests(unittest.TestCase):
             records,
             [{"type": "reset", "ref": "refs/heads/orphan"}, {"type": "done"}],
         )
+
+    def test_large_payload_written_as_delimited_block(self):
+        big_line = b"x" * 79 + b"\n"
+        payload = big_line * (_DELIMITED_THRESHOLD // len(big_line) + 1)
+        self.assertGreaterEqual(len(payload), _DELIMITED_THRESHOLD)
+        record = {
+            "type": "blob",
+            "mark": ":9",
+            "encoding": "utf-8",
+            "data": payload.decode("ascii"),
+        }
+
+        buf = io.BytesIO()
+        FastExportWriter(buf).write_record(record)
+        written = buf.getvalue()
+        self.assertIn(b"data <<END_", written)
+
+        buf.seek(0)
+        self.assertEqual(list(FastExportReader(buf).records()), [record])
+
+    def test_large_payload_without_trailing_newline_stays_exact_length(self):
+        # Our delimited reader can't tell "payload ended right before the
+        # delimiter line" apart from "the last line happened to be blank",
+        # so a payload not ending in "\n" must fall back to the exact-length
+        # form even past the size threshold.
+        payload = b"x" * (_DELIMITED_THRESHOLD + 1)
+        record = {
+            "type": "blob",
+            "mark": ":9",
+            "encoding": "utf-8",
+            "data": payload.decode("ascii"),
+        }
+
+        buf = io.BytesIO()
+        FastExportWriter(buf).write_record(record)
+        written = buf.getvalue()
+        self.assertTrue(written.startswith(b"blob\nmark :9\ndata " + str(len(payload)).encode("ascii") + b"\n"))
+
+        buf.seek(0)
+        self.assertEqual(list(FastExportReader(buf).records()), [record])
 
     def test_tag_without_tagger(self):
         stream = io.BytesIO(
