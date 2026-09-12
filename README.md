@@ -41,6 +41,14 @@ jq 'select(.type == "commit") | .message' history.jsonl
 jq 'select(.type == "commit" and (.merges // []) != [])' history.jsonl | wc -l
 ```
 
+If you only care about one or two record types, filter at the source
+instead of piping everything through `jq` first - `--type` can be
+repeated:
+
+```sh
+git fast-export --all | python -m fastexport_jsonl to-jsonl --type commit --type tag > commits_and_tags.jsonl
+```
+
 To go back the other way, feed edited (or untouched) JSON Lines to
 `from-jsonl` and pipe the result into `git fast-import`:
 
@@ -94,7 +102,6 @@ Not done yet:
 
 - no round-trip test against an actual repository's `fast-export`
   output, only the synthetic fixture above
-- no CLI flag to filter records by type
 
 ## License
 
