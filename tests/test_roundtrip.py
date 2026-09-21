@@ -219,6 +219,41 @@ class RoundTripTests(unittest.TestCase):
         buf.seek(0)
         self.assertEqual(list(FastExportReader(buf).records()), [record])
 
+    def test_commit_with_encoding_header(self):
+        # git fast-export emits an "encoding <name>" line before the data
+        # block for commits whose commit object carries a non-default
+        # message encoding (common in history migrated from older tools).
+        message = b"legacy commit\n"
+        stream = io.BytesIO(
+            b"commit refs/heads/main\n"
+            b"mark :1\n"
+            b"author " + AUTHOR + b"\n"
+            b"committer " + AUTHOR + b"\n"
+            b"encoding ISO-8859-1\n"
+            + _data(message)
+            + b"M 100644 :1 hello.txt\n"
+            b"\n"
+        )
+        expected = {
+            "type": "commit",
+            "ref": "refs/heads/main",
+            "mark": ":1",
+            "author": AUTHOR.decode("ascii"),
+            "committer": AUTHOR.decode("ascii"),
+            "encoding": "ISO-8859-1",
+            "message": message.decode("ascii"),
+            "message_encoding": "utf-8",
+            "changes": [{"op": "M", "mode": "100644", "dataref": ":1", "path": "hello.txt"}],
+        }
+
+        records = list(FastExportReader(stream).records())
+        self.assertEqual(records, [expected])
+
+        buf = io.BytesIO()
+        FastExportWriter(buf).write(records)
+        buf.seek(0)
+        self.assertEqual(list(FastExportReader(buf).records()), [expected])
+
     def test_tag_without_tagger(self):
         stream = io.BytesIO(
             b"tag v0.1\nfrom :1\n" + _data(b"early release\n")

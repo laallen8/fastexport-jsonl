@@ -80,9 +80,15 @@ for record in FastExportReader(sys.stdin.buffer).records():
 
 Both directions exist now. The parser and writer both cover `blob`,
 `commit`, `reset`, and `tag` commands, including file changes
-(`M`/`D`/`C`/`R`/`N`/`deleteall`) with C-quoted paths. Anything else
-(`feature`, `progress`, `checkpoint`, ...) round-trips verbatim as an
-`"other"` record instead of being dropped.
+(`M`/`D`/`C`/`R`/`N`/`deleteall`) with C-quoted paths, and the optional
+`encoding` line fast-export emits before a commit's message when the
+commit object itself records a non-default message encoding (history
+migrated from tools that didn't write UTF-8 commit messages - it ends
+up as an `"encoding"` field on the commit record, distinct from
+`message_encoding`, which just says whether `message` is packed as
+UTF-8 text or base64 in the JSON). Anything else (`feature`,
+`progress`, `checkpoint`, ...) round-trips verbatim as an `"other"`
+record instead of being dropped.
 
 `tests/test_roundtrip.py` covers both directions against a hand-built
 fast-export stream (exact-length and delimited `data` blocks, a binary

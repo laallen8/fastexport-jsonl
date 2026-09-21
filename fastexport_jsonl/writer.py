@@ -92,6 +92,8 @@ class FastExportWriter:
         if "author" in record:
             self._write_line(b"author " + _encode(record["author"]))
         self._write_line(b"committer " + _encode(_require(record, "committer")))
+        if "encoding" in record:
+            self._write_line(b"encoding " + _encode(record["encoding"]))
         self._write_data(record, "message_encoding", "message")
         if "from" in record:
             self._write_line(b"from " + _encode(record["from"]))

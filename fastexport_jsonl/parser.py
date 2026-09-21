@@ -139,6 +139,17 @@ class FastExportReader:
         if line is None or not line.startswith(b"committer "):
             raise ParseError("commit is missing a committer line")
         record["committer"] = _decode(line[len(b"committer "):].rstrip(b"\n"))
+        line = self._next_line()
+
+        if line is not None and line.startswith(b"encoding "):
+            # Recorded when the commit object itself carries a non-default
+            # "encoding" header (old history migrated from tools that didn't
+            # write UTF-8 commit messages). This is metadata about how to
+            # display the message, not how we've packed it into JSON below.
+            record["encoding"] = _decode(line[len(b"encoding "):].rstrip(b"\n"))
+            line = self._next_line()
+        if line is not None:
+            self._push_back(line)
 
         message = self._read_data_block()
         record["message"] = message["data"]
